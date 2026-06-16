@@ -6,8 +6,6 @@
 
 **The AI-Powered Road Intelligence & Navigation Platform**
 
-![StreetIQ Hero](frontend/src/assets/hero.png)
-
 ---
 
 ## What does StreetIQ do?
