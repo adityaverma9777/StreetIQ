@@ -1,0 +1,15 @@
+# Ignore editor settings
+.vscode/
+.idea/
+
+# Ignore files
+legacy_2019_hackathon/
+feature_status.md
+RouteWave/
+# System files
+.DS_Store
+Thumbs.db
+
+# Any root-level environment variables
+.env
+.env.local
