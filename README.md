@@ -1,4 +1,8 @@
-# StreetIQ 🛣️
+<h1>
+  <img src="./frontend/public/logo.png" alt="StreetIQ Logo" width="48" align="left" style="margin-right: 16px;" />
+  StreetIQ
+</h1>
+<br/>
 
 **The AI-Powered Road Intelligence & Navigation Platform**
 
