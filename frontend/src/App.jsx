@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, ZoomControl, useMap, LayersCont
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import 'leaflet.heat';
+import { useNavigate } from 'react-router-dom';
 import { Map as MapIcon, Camera, PlusCircle, LocateFixed, Square, Upload, ChevronRight, Navigation } from 'lucide-react';
 import './index.css';
 import RecordView from './RecordView';
@@ -76,6 +77,7 @@ const parseLocation = (loc, fallback) => {
 };
 
 export default function App() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('map');
   const [hazards, setHazards] = useState([]);
   const initialPosition = [28.6139, 77.2090];
@@ -253,6 +255,28 @@ export default function App() {
 
         <button className="gps-btn" onClick={goToLiveLocation} title="My Location">
           <LocateFixed size={20} strokeWidth={2} />
+        </button>
+
+        <button
+          onClick={() => navigate('/about')}
+          title="About StreetIQ"
+          style={{
+            position: 'absolute',
+            bottom: 'calc(var(--bottom-bar-height) + var(--safe-bottom) + 124px)',
+            right: 18,
+            zIndex: 1200,
+            width: 36, height: 36,
+            borderRadius: '50%',
+            background: '#fff',
+            border: 'none',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
+            cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 0,
+            overflow: 'hidden',
+          }}
+        >
+          <img src="/logo.png" alt="StreetIQ" style={{ width: 22, height: 22, objectFit: 'contain', display: 'block' }} />
         </button>
 
         <MapContainer ref={mapRef} center={initialPosition} zoom={13} zoomControl={false} style={{ height: '100%', width: '100%' }}>
