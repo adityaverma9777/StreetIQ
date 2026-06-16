@@ -4,8 +4,10 @@ on:
   push:
     branches:
       - main
+      - master
     paths:
       - 'backend/**'
+      - '.github/workflows/**'
 
 jobs:
   deploy:
@@ -41,3 +43,4 @@ jobs:
         version_label: "backend-${{ github.sha }}"
         region: ${{ secrets.AWS_REGION }}
         deployment_package: backend/deploy.zip
+        use_existing_version_if_available: true
