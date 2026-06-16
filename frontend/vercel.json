@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "http://streetiq-backend-env.eba-fztpzg2y.ap-south-1.elasticbeanstalk.com/api/:path*"
+    }
+  ]
+}
