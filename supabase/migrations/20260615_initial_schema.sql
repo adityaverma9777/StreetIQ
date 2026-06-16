@@ -54,7 +54,7 @@ create policy "Users can update own profile"
 on public.profiles for update using (auth.uid() = id);
 
 -- Function: Auto-create profile on signup
-create or function public.handle_new_user()
+create or replace function public.handle_new_user()
 returns trigger as $$
 begin
   insert into public.profiles (id)
