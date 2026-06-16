@@ -13,3 +13,6 @@ Thumbs.db
 # Any root-level environment variables
 .env
 .env.local
+
+# Deployment Guide
+secrets.md
