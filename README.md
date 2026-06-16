@@ -10,18 +10,18 @@
 
 ---
 
-## 🧐 What does StreetIQ do?
+## What does StreetIQ do?
 StreetIQ is a next-generation navigation and road monitoring platform. While conventional maps tell you how to get from point A to point B, StreetIQ tells you **what is actually on the road**. 
 
 We provide smooth, real-time turn-by-turn navigation overlayed with live crowdsourced hazard data—such as potholes, waterlogging, severe cracks, and debris.
 
-## ⚠️ The Problem It Solves
+## The Problem It Solves
 Millions of people face unpredictable road conditions daily, especially in developing regions.
 - **Safety Risks:** Hidden potholes and sudden debris lead to severe accidents and vehicle damage.
 - **Blind Navigation:** Standard navigation apps assume all roads are perfect, completely ignoring temporary hazards or severe road degradation.
 - **Data Collection Bottleneck:** Municipalities and road authorities lack the workforce to actively monitor thousands of kilometers of roads in real-time.
 
-## 💡 The Solution & How It Works
+## The Solution & How It Works
 StreetIQ solves this by turning every driver into an active road surveyor—without requiring them to do any manual work.
 
 1. **On-Device AI Inference:** As you navigate, you can activate the AI dashcam. Using a highly optimized, lightweight **YOLOv8** model running entirely in your browser (via TensorFlow.js), the app scans the road ahead at a stable 15fps.
@@ -31,10 +31,10 @@ StreetIQ solves this by turning every driver into an active road surveyor—with
 
 ---
 
-## 🧠 We Built & Trained Our Own Model
+## We Built & Trained Our Own Model
 We didn't just plug in a generic pre-trained API. We **hand-trained our own state-of-the-art YOLOv8 model** specifically calibrated for complex Indian road conditions. Our model is highly tuned to identify `cracks`, `potholes`, `waterlogging`, and `debris` in real-time under various lighting conditions.
 
-### 📊 Dataset & Ground Truth Distribution
+### Dataset & Ground Truth Distribution
 Before training, we curated and labeled thousands of real-world street images. Here is a glimpse of our raw training data, label distribution, and the human-verified ground truth annotations that our AI learned from:
 
 | Dataset Labels Overview | Training Batch 0 | Training Batch 1 |
@@ -52,7 +52,7 @@ Before training, we curated and labeled thousands of real-world street images. H
 | <img src="./training/val_batch2_labels.jpg" width="280"> | | |
 | **Validation Target:** Unseen batch 2 ground truth targets. | | |
 
-### 🎯 Real-World AI Validation (Predictions)
+### Real-World AI Validation (Predictions)
 Here is how our trained AI performs on that unseen validation dashcam footage, successfully drawing accurate bounding boxes around hazards:
 
 | Validation Prediction 0 | Validation Prediction 1 | Validation Prediction 2 |
@@ -60,7 +60,7 @@ Here is how our trained AI performs on that unseen validation dashcam footage, s
 | <img src="./training/val_batch0_pred.jpg" width="280"> | <img src="./training/val_batch1_pred.jpg" width="280"> | <img src="./training/val_batch2_pred.jpg" width="280"> |
 | Identifying severe cracks on high-speed roads. | Spotting deep potholes masked by shadows. | Detecting waterlogging and debris in dense traffic. |
 
-### 📈 Comprehensive Training Metrics
+### Comprehensive Training Metrics
 Our model underwent rigorous evaluation to ensure it can run efficiently in the browser without sacrificing safety or accuracy.
 
 | Precision-Recall Curve | F1 Confidence Curve | Precision Curve |
@@ -75,7 +75,7 @@ Our model underwent rigorous evaluation to ensure it can run efficiently in the 
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 **Frontend:**
 - React (Vite)
