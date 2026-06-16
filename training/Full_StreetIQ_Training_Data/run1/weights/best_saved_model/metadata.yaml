@@ -1,7 +1,7 @@
 description: Ultralytics best model trained on /kaggle/working/working_data.yaml
 author: Ultralytics
-date: '2026-06-16T01:42:58.811584'
-version: 8.4.67
+date: '2026-06-16T23:49:13.397648'
+version: 8.4.41
 license: AGPL-3.0 License (https://ultralytics.com/license)
 docs: https://docs.ultralytics.com
 stride: 32
@@ -16,11 +16,9 @@ names:
   2: D20 (Alligator Crack)
   3: D40 (Pothole)
 args:
-  data: coco8.yaml
   batch: 1
-  fraction: 1.0
   half: false
-  int8: true
+  int8: false
   nms: false
 channels: 3
 end2end: false

@@ -15,6 +15,7 @@ export default function RecordView({ onHazardDetected, isRecording, setIsRecordi
   const [showVideoAnalysis, setShowVideoAnalysis] = useState(false);
   const [fpsTarget, setFpsTarget] = useState(15);
   const [inferenceActive, setInferenceActive] = useState(false);
+  const [useFixture, setUseFixture] = useState(false);
 
   const { handlePosition, cleanup } = useMotionGate(
     useCallback(() => setInferenceActive(true), []),

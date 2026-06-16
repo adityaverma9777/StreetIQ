@@ -100,26 +100,41 @@ export default function VideoAnalysis({ model }) {
     const canvas = canvasRef.current;
     const overlay = overlayRef.current;
 
-    await new Promise(res => { video.onloadedmetadata = res; if (video.duration) res(); });
-    video.currentTime = 0;
-    await new Promise(res => { video.onseeked = res; video.currentTime = 0.001; });
+    let duration = video.duration;
+    if (!duration || isNaN(duration) || duration === Infinity) {
+      duration = 30;
+    }
 
-    const duration = video.duration;
+    const seekTo = (time) => new Promise(res => {
+      if (Math.abs(video.currentTime - time) < 0.05) return res();
+      let isDone = false;
+      const done = () => {
+        if (isDone) return;
+        isDone = true;
+        video.onseeked = null;
+        res();
+      };
+      video.onseeked = done;
+      video.currentTime = time;
+      setTimeout(done, 300);
+    });
+
     const interval = 1 / PROCESS_FPS;
     let currentTime = 0;
     const countsByType = {};
 
     const processNextFrame = async () => {
-      if (currentTime > duration) {
+      const reachedEndByClamp = currentTime > 0.5 && Math.abs(video.currentTime - currentTime) > 0.5;
+      
+      if (currentTime > duration || video.ended || reachedEndByClamp) {
         setPhase('done');
         const total = Object.values(countsByType).reduce((a, b) => a + b, 0);
-        setSummary({ countsByType, total, duration: Math.round(duration) });
+        setSummary({ countsByType, total, duration: Math.round(video.currentTime || duration) });
         return;
       }
 
-      video.currentTime = currentTime;
-      await new Promise(res => { video.onseeked = res; });
-      setProgress(Math.round((currentTime / duration) * 100));
+      await seekTo(currentTime);
+      setProgress(Math.min(100, Math.round((currentTime / duration) * 100)));
 
       canvas.width = video.videoWidth || 640;
       canvas.height = video.videoHeight || 360;
@@ -132,9 +147,14 @@ export default function VideoAnalysis({ model }) {
       tf.engine().startScope();
       try {
         const tensor = tf.browser.fromPixels(canvas)
-          .resizeBilinear([640, 640]).expandDims(0).toFloat().div(255.0);
-        const predictions = await model.executeAsync(tensor);
-        const detections = await parseYoloOutputAll(predictions, 0.35);
+          .resizeBilinear([640, 640]).expandDims(0).toFloat();
+        
+        // DEBUG: Let's see if the tensor is empty
+        const tMin = tensor.min().dataSync()[0];
+        const tMax = tensor.max().dataSync()[0];
+        console.log(`[TENSOR DEBUG] min=${tMin} max=${tMax}`);
+        const predictions = model.execute(tensor);
+        const detections = await parseYoloOutputAll(predictions, 0.20);
 
         const octx = overlay.getContext('2d');
         octx.clearRect(0, 0, overlay.width, overlay.height);
@@ -186,7 +206,7 @@ export default function VideoAnalysis({ model }) {
         </button>
       </div>
 
-      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: phase === 'idle' ? 'center' : 'flex-start', padding: 16, gap: 12 }}>
+      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: phase === 'idle' ? 'center' : 'flex-start', padding: 16, gap: 12 }}>
 
         {phase === 'idle' && (
           <label style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, width: '100%' }}>
@@ -212,8 +232,8 @@ export default function VideoAnalysis({ model }) {
         {(phase === 'ready' || phase === 'processing' || phase === 'done') && (
           <>
             <div style={{ width: '100%', borderRadius: 12, overflow: 'hidden', position: 'relative', background: '#111', aspectRatio: '16/9' }}>
-              <video ref={videoRef} style={{ display: 'none' }} playsInline muted />
-              <canvas ref={canvasRef} style={{ display: 'none' }} />
+              <video ref={videoRef} src={blobUrl} style={{ opacity: 0.01, position: 'absolute', width: 10, height: 10, pointerEvents: 'none' }} playsInline muted crossOrigin="anonymous" />
+              <canvas ref={canvasRef} style={{ opacity: 0.01, position: 'absolute', width: 10, height: 10, pointerEvents: 'none' }} />
               <canvas ref={overlayRef} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', background: '#000' }} />
               {phase === 'ready' && (
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}>

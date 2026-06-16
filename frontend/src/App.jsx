@@ -125,7 +125,7 @@ export default function App() {
       await signInAnonymously();
       const { data } = await supabase.from('hazards').select('*').eq('status', 'verified');
       if (data) setHazards(data);
-      const channel = supabase.channel('public:hazards')
+      const channel = supabase.channel(`hazards_channel_${Date.now()}`)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hazards' }, p => setHazards(prev => [...prev, p.new]))
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hazards' }, p => setHazards(prev => prev.map(h => h.id === p.new.id ? p.new : h)))
         .subscribe();
