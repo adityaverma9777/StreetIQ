@@ -21,32 +21,23 @@ function drawDetections(ctx, detections, canvasW, canvasH) {
     const y = ((cy - h / 2) / 640) * canvasH;
     const bw = (w / 640) * canvasW;
     const bh = (h / 640) * canvasH;
-
     const color = LABEL_COLORS[className] || '#007AFF';
-
     ctx.strokeStyle = color;
     ctx.lineWidth = 2.5;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 8;
     ctx.strokeRect(x, y, bw, bh);
-    ctx.shadowBlur = 0;
-
     ctx.fillStyle = color;
     ctx.globalAlpha = 0.12;
     ctx.fillRect(x, y, bw, bh);
     ctx.globalAlpha = 1;
-
     const label = `${className} ${Math.round(confidence * 100)}%`;
     ctx.font = 'bold 11px Inter, system-ui, sans-serif';
     const textW = ctx.measureText(label).width;
     const labelH = 18;
     const labelY = y > labelH + 4 ? y - labelH - 2 : y + bh + 2;
-
     ctx.fillStyle = color;
     ctx.beginPath();
     ctx.roundRect(x - 1, labelY, textW + 10, labelH, 4);
     ctx.fill();
-
     ctx.fillStyle = 'white';
     ctx.fillText(label, x + 4, labelY + labelH - 4);
   });
@@ -61,18 +52,18 @@ export default function VideoAnalysis({ model }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const overlayRef = useRef(null);
-  const rafRef = useRef(null);
+  const timerRef = useRef(null);
+  const stoppedRef = useRef(false);
   const fileRef = useRef(null);
   const detectionLogRef = useRef([]);
-
+  const canvasDimsRef = useRef({ w: 0, h: 0 });
   const cleanup = useCallback(() => {
-    cancelAnimationFrame(rafRef.current);
+    stoppedRef.current = true;
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
     if (blobUrl) { URL.revokeObjectURL(blobUrl); }
     detectionLogRef.current = [];
   }, [blobUrl]);
-
   useEffect(() => () => cleanup(), [cleanup]);
-
   const handleFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -92,19 +83,17 @@ export default function VideoAnalysis({ model }) {
       videoRef.current.load();
     }
   };
-
   const startProcessing = async () => {
     if (!model || !videoRef.current) return;
     setPhase('processing');
+    stoppedRef.current = false;
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const overlay = overlayRef.current;
-
     let duration = video.duration;
     if (!duration || isNaN(duration) || duration === Infinity) {
       duration = 30;
     }
-
     const seekTo = (time) => new Promise(res => {
       if (Math.abs(video.currentTime - time) < 0.05) return res();
       let isDone = false;
@@ -116,41 +105,46 @@ export default function VideoAnalysis({ model }) {
       };
       video.onseeked = done;
       video.currentTime = time;
-      setTimeout(done, 300);
+      setTimeout(done, 50);
     });
-
     const interval = 1 / PROCESS_FPS;
     let currentTime = 0;
     const countsByType = {};
-
+    let lastProgressUpdate = 0;
     const processNextFrame = async () => {
+      if (stoppedRef.current) return;
       const reachedEndByClamp = currentTime > 0.5 && Math.abs(video.currentTime - currentTime) > 0.5;
-      
       if (currentTime > duration || video.ended || reachedEndByClamp) {
         setPhase('done');
         const total = Object.values(countsByType).reduce((a, b) => a + b, 0);
         setSummary({ countsByType, total, duration: Math.round(video.currentTime || duration) });
         return;
       }
-
       await seekTo(currentTime);
-      setProgress(Math.min(100, Math.round((currentTime / duration) * 100)));
-
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 360;
-      overlay.width = canvas.width;
-      overlay.height = canvas.height;
-
+      const newProgress = Math.min(100, Math.round((currentTime / duration) * 100));
+      if (newProgress !== lastProgressUpdate) {
+        setProgress(newProgress);
+        lastProgressUpdate = newProgress;
+      }
+      const vw = video.videoWidth || 640;
+      const vh = video.videoHeight || 360;
+      if (canvasDimsRef.current.w !== vw || canvasDimsRef.current.h !== vh) {
+        canvas.width = vw;
+        canvas.height = vh;
+        overlay.width = vw;
+        overlay.height = vh;
+        canvasDimsRef.current = { w: vw, h: vh };
+      }
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
       try {
-        const predictions = await tf.tidy(() => {
-          const tensor = tf.browser.fromPixels(canvas)
-            .resizeBilinear([640, 640])
-            .expandDims(0)
-            .toFloat();
-          return model.execute(tensor);
+        const predictions = tf.tidy(() => {
+          return model.execute(
+            tf.browser.fromPixels(canvas)
+              .resizeBilinear([640, 640])
+              .expandDims(0)
+              .toFloat()
+          );
         });
         const detections = await parseYoloOutputAll(predictions, 0.20);
         if (Array.isArray(predictions)) predictions.forEach(t => t.dispose());
@@ -166,14 +160,17 @@ export default function VideoAnalysis({ model }) {
       } catch (e) {
         console.error('Frame inference error:', e);
       }
-
       currentTime += interval;
-      rafRef.current = requestAnimationFrame(processNextFrame);
+      timerRef.current = setTimeout(processNextFrame, 0);
     };
-
     processNextFrame();
   };
-
+  const stopProcessing = () => {
+    stoppedRef.current = true;
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+    setPhase('done');
+    setSummary({ countsByType: {}, total: detectionLogRef.current.length, duration: 0 });
+  };
   const reset = () => {
     cleanup();
     setBlobUrl(null);
@@ -182,13 +179,12 @@ export default function VideoAnalysis({ model }) {
     setSummary(null);
     setError(null);
     detectionLogRef.current = [];
+    canvasDimsRef.current = { w: 0, h: 0 };
     if (fileRef.current) fileRef.current = null;
     if (videoRef.current) { videoRef.current.src = ''; videoRef.current.load(); }
   };
-
   const hazardEmoji = { crack: '⚡', pothole: '🕳️', waterlogging: '💧', debris: '🪨', unknown: '⚠️' };
   const BUTTON_BAR_H = 70;
-
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 'calc(var(--bottom-bar-height) + var(--safe-bottom, 0px))', background: '#000', zIndex: 3000, display: 'flex', flexDirection: 'column' }}>
       <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'calc(env(safe-area-inset-top, 0px) + 16px) 20px 12px', background: 'rgba(18,18,18,0.95)', borderBottom: '0.5px solid rgba(84,84,88,0.4)' }}>
@@ -248,7 +244,7 @@ export default function VideoAnalysis({ model }) {
                   <div style={{ height: '100%', width: `${progress}%`, background: '#0A84FF', borderRadius: 2, transition: 'width 0.3s ease' }} />
                 </div>
                 <div style={{ fontSize: 11, color: 'rgba(235,235,245,0.35)', fontFamily: 'Inter, sans-serif', marginTop: 6, textAlign: 'center' }}>
-                  Running at {PROCESS_FPS} fps · On-device AI · No data leaves your device
+                  On-device AI · No data leaves your device
                 </div>
               </div>
             )}
@@ -296,7 +292,7 @@ export default function VideoAnalysis({ model }) {
           )}
           {phase === 'processing' && (
             <button
-              onClick={() => { cancelAnimationFrame(rafRef.current); setPhase('done'); setSummary({ countsByType: {}, total: detectionLogRef.current.length, duration: 0 }); }}
+              onClick={stopProcessing}
               style={{ flex: 1, padding: '13px 0', borderRadius: 12, border: 'none', background: '#FF453A', color: 'white', fontSize: 15, fontWeight: 600, fontFamily: 'Inter, sans-serif', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
             >
               <Square size={14} fill="white" strokeWidth={0} /> Stop

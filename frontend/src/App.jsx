@@ -114,7 +114,7 @@ export default function App() {
       try {
         const m = await tf.loadGraphModel('/model/model.json');
         const warmup = tf.zeros([1, 640, 640, 3]);
-        const out = m.execute(warmup);
+        const out = await m.executeAsync(warmup);
         if (Array.isArray(out)) out.forEach(t => t.dispose()); else out.dispose();
         warmup.dispose();
         setModel(m);

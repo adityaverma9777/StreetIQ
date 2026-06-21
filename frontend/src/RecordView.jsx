@@ -7,37 +7,40 @@ import { useMotionGate } from './hooks/useMotionGate';
 import VideoAnalysis from './components/VideoAnalysis';
 
 const SESSION_ID = crypto.randomUUID();
+const CAMERA_CONSTRAINTS = {
+  video: {
+    facingMode: 'environment',
+    width: { ideal: 640 },
+    height: { ideal: 480 },
+  },
+};
 
 export default function RecordView({ onHazardDetected, isRecording, setIsRecording, userLocation, speedKmh, model }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
+  const canvasDimsRef = useRef({ w: 0, h: 0 });
   const [permissionGranted, setPermissionGranted] = useState(false);
   const [showVideoAnalysis, setShowVideoAnalysis] = useState(false);
   const [fpsTarget, setFpsTarget] = useState(15);
   const [inferenceActive, setInferenceActive] = useState(false);
   const [useFixture, setUseFixture] = useState(false);
-
   const { handlePosition, cleanup } = useMotionGate(
     useCallback(() => setInferenceActive(true), []),
     useCallback(() => { setInferenceActive(false); setIsRecording(false); }, [setIsRecording])
   );
-
   useEffect(() => {
     if (speedKmh !== undefined) handlePosition({ coords: { speed: speedKmh / 3.6 } });
   }, [speedKmh, handlePosition]);
-
   useEffect(() => () => cleanup(), [cleanup]);
-
   const requestCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      const stream = await navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS);
       if (videoRef.current) { videoRef.current.srcObject = stream; setPermissionGranted(true); setUseFixture(false); }
     } catch {
       setUseFixture(true); setPermissionGranted(true);
       if (videoRef.current) { videoRef.current.src = '/test_dashcam_clip.mp4'; videoRef.current.loop = true; }
     }
   };
-
   const toggleFixture = () => {
     const next = !useFixture;
     setUseFixture(next); setPermissionGranted(true);
@@ -46,38 +49,42 @@ export default function RecordView({ onHazardDetected, isRecording, setIsRecordi
       else { videoRef.current.src = ''; requestCamera(); }
     }
   };
-
   useEffect(() => {
     if (!isRecording || !inferenceActive || !model || !permissionGranted) return;
     let frameId;
     let lastTime = 0;
     const INTERVAL = 1000 / fpsTarget;
-
     const processFrame = async (timestamp) => {
       frameId = requestAnimationFrame(processFrame);
       if (timestamp - lastTime < INTERVAL) return;
       lastTime = timestamp;
       if (!videoRef.current || videoRef.current.readyState !== 4) return;
-
       const inferenceStart = performance.now();
-      tf.engine().startScope();
       try {
-        const tensor = tf.browser.fromPixels(videoRef.current)
-          .resizeBilinear([640, 640]).expandDims(0).toFloat();
-        const predictions = await model.executeAsync(tensor);
+        const predictions = tf.tidy(() => {
+          return model.execute(
+            tf.browser.fromPixels(videoRef.current)
+              .resizeBilinear([640, 640]).expandDims(0).toFloat()
+          );
+        });
         const detections = await parseYoloOutput(predictions, 0.5);
-
+        if (Array.isArray(predictions)) predictions.forEach(t => t.dispose());
+        else predictions.dispose();
         if (detections.length > 0 && userLocation) {
           const best = detections[0];
           let imageBlob = null;
           if (canvasRef.current) {
-            const ctx = canvasRef.current.getContext('2d');
-            canvasRef.current.width = videoRef.current.videoWidth;
-            canvasRef.current.height = videoRef.current.videoHeight;
-            ctx.drawImage(videoRef.current, 0, 0);
+            const vw = videoRef.current.videoWidth;
+            const vh = videoRef.current.videoHeight;
+            if (canvasDimsRef.current.w !== vw || canvasDimsRef.current.h !== vh) {
+              canvasRef.current.width = vw;
+              canvasRef.current.height = vh;
+              canvasDimsRef.current = { w: vw, h: vh };
+            }
+            canvasRef.current.getContext('2d').drawImage(videoRef.current, 0, 0);
             imageBlob = await new Promise(r => canvasRef.current.toBlob(r, 'image/jpeg', 0.8));
           }
-          await supabase.rpc('insert_road_scan', {
+          supabase.rpc('insert_road_scan', {
             p_session_id: SESSION_ID,
             p_lat: userLocation[0],
             p_lon: userLocation[1],
@@ -85,7 +92,7 @@ export default function RecordView({ onHazardDetected, isRecording, setIsRecordi
             p_confidence: best.confidence,
             p_speed_kmh: speedKmh || 0,
             p_source: 'ai_scan',
-          });
+          }).catch(() => {});
           onHazardDetected({ type: best.className, severity: best.confidence > 0.8 ? 5 : 3, confidence: best.confidence }, imageBlob);
         }
         const elapsed = performance.now() - inferenceStart;
@@ -93,15 +100,11 @@ export default function RecordView({ onHazardDetected, isRecording, setIsRecordi
         else if (elapsed > 100 && fpsTarget > 5) setFpsTarget(5);
       } catch (e) {
         console.error('Inference error:', e);
-      } finally {
-        tf.engine().endScope();
       }
     };
-
     frameId = requestAnimationFrame(processFrame);
     return () => cancelAnimationFrame(frameId);
   }, [isRecording, inferenceActive, fpsTarget, model, permissionGranted, userLocation, speedKmh, onHazardDetected]);
-
   return (
     <div className="camera-overlay">
       {showVideoAnalysis && (

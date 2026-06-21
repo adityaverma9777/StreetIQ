@@ -10,19 +10,20 @@ const SESSION_ID = crypto.randomUUID();
 export default function CameraPiP({ userLocation, speedKmh, model, isRecording, onDetection }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
+  const canvasDimsRef = useRef({ w: 0, h: 0 });
   const [minimized, setMinimized] = useState(false);
   const [inferenceActive, setInferenceActive] = useState(false);
   const [permissionGranted, setPermissionGranted] = useState(false);
-
   const { handlePosition, cleanup } = useMotionGate(
     useCallback(() => setInferenceActive(true), []),
     useCallback(() => setInferenceActive(false), [])
   );
-
   useEffect(() => {
     (async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
+        });
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           setPermissionGranted(true);
@@ -36,43 +37,47 @@ export default function CameraPiP({ userLocation, speedKmh, model, isRecording, 
       cleanup();
     };
   }, [cleanup]);
-
   useEffect(() => {
     if (speedKmh !== undefined) {
       handlePosition({ coords: { speed: speedKmh / 3.6 } });
     }
   }, [speedKmh, handlePosition]);
-
   useEffect(() => {
     if (!isRecording || !inferenceActive || !model || !permissionGranted) return;
     let frameId;
     let lastTime = 0;
-    const INTERVAL = 1000;
-
+    let interval = 1000;
     const runInference = async (timestamp) => {
       frameId = requestAnimationFrame(runInference);
-      if (timestamp - lastTime < INTERVAL) return;
+      if (timestamp - lastTime < interval) return;
       lastTime = timestamp;
       if (!videoRef.current || videoRef.current.readyState !== 4) return;
-
-      tf.engine().startScope();
+      const t0 = performance.now();
       try {
-        const tensor = tf.browser.fromPixels(videoRef.current)
-          .resizeBilinear([640, 640]).expandDims(0).toFloat();
-        const predictions = await model.executeAsync(tensor);
+        const predictions = tf.tidy(() => {
+          return model.execute(
+            tf.browser.fromPixels(videoRef.current)
+              .resizeBilinear([640, 640]).expandDims(0).toFloat()
+          );
+        });
         const detections = await parseYoloOutput(predictions, 0.5);
-
+        if (Array.isArray(predictions)) predictions.forEach(t => t.dispose());
+        else predictions.dispose();
         if (detections.length > 0 && userLocation) {
           const best = detections[0];
           let imageBlob = null;
           if (canvasRef.current) {
-            const ctx = canvasRef.current.getContext('2d');
-            canvasRef.current.width = videoRef.current.videoWidth;
-            canvasRef.current.height = videoRef.current.videoHeight;
-            ctx.drawImage(videoRef.current, 0, 0);
+            const vw = videoRef.current.videoWidth;
+            const vh = videoRef.current.videoHeight;
+            if (canvasDimsRef.current.w !== vw || canvasDimsRef.current.h !== vh) {
+              canvasRef.current.width = vw;
+              canvasRef.current.height = vh;
+              canvasDimsRef.current = { w: vw, h: vh };
+            }
+            canvasRef.current.getContext('2d').drawImage(videoRef.current, 0, 0);
             imageBlob = await new Promise(r => canvasRef.current.toBlob(r, 'image/jpeg', 0.7));
           }
-          await supabase.rpc('insert_road_scan', {
+          supabase.rpc('insert_road_scan', {
             p_session_id: SESSION_ID,
             p_lat: userLocation[0],
             p_lon: userLocation[1],
@@ -80,24 +85,23 @@ export default function CameraPiP({ userLocation, speedKmh, model, isRecording, 
             p_confidence: best.confidence,
             p_speed_kmh: speedKmh || 0,
             p_source: 'drive_scan',
-          });
+          }).catch(() => {});
           onDetection?.({ type: best.className, confidence: best.confidence, imageBlob });
         }
+        const elapsed = performance.now() - t0;
+        if (elapsed > 500) interval = 2000;
+        else if (elapsed > 200) interval = 1500;
+        else interval = 1000;
       } catch (e) {
         console.error('PiP inference error:', e);
-      } finally {
-        tf.engine().endScope();
       }
     };
-
     frameId = requestAnimationFrame(runInference);
     return () => cancelAnimationFrame(frameId);
   }, [isRecording, inferenceActive, model, permissionGranted, userLocation, speedKmh, onDetection]);
-
   const size = minimized
     ? { width: 80, height: 60 }
     : { width: 160, height: 120 };
-
   return (
     <div style={{
       position: 'fixed',
