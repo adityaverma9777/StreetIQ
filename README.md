@@ -8,6 +8,11 @@
 
 ---
 
+## Demo Video
+[![StreetIQ Demo Video](https://img.youtube.com/vi/lJVnyaPadkw/0.jpg)](https://www.youtube.com/watch?v=lJVnyaPadkw)
+
+---
+
 ## What does StreetIQ do?
 StreetIQ is a next-generation navigation and road monitoring platform. While conventional maps tell you how to get from point A to point B, StreetIQ tells you **what is actually on the road**. 
 
