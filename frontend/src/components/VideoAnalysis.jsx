@@ -4,7 +4,7 @@ import * as tf from '@tensorflow/tfjs';
 import { parseYoloOutputAll } from '../utils/tfjsParser';
 
 const MAX_FILE_MB = 50;
-const PROCESS_FPS = 5;
+const PROCESS_FPS = 2;
 const LABEL_COLORS = {
   crack: '#007AFF',
   pothole: '#FF453A',
@@ -144,31 +144,27 @@ export default function VideoAnalysis({ model }) {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      tf.engine().startScope();
       try {
-        const tensor = tf.browser.fromPixels(canvas)
-          .resizeBilinear([640, 640]).expandDims(0).toFloat();
-        
-        // DEBUG: Let's see if the tensor is empty
-        const tMin = tensor.min().dataSync()[0];
-        const tMax = tensor.max().dataSync()[0];
-        console.log(`[TENSOR DEBUG] min=${tMin} max=${tMax}`);
-        const predictions = model.execute(tensor);
+        const predictions = await tf.tidy(() => {
+          const tensor = tf.browser.fromPixels(canvas)
+            .resizeBilinear([640, 640])
+            .expandDims(0)
+            .toFloat();
+          return model.execute(tensor);
+        });
         const detections = await parseYoloOutputAll(predictions, 0.20);
-
+        if (Array.isArray(predictions)) predictions.forEach(t => t.dispose());
+        else predictions.dispose();
         const octx = overlay.getContext('2d');
         octx.clearRect(0, 0, overlay.width, overlay.height);
         octx.drawImage(video, 0, 0, overlay.width, overlay.height);
         drawDetections(octx, detections, overlay.width, overlay.height);
-
         detections.forEach(d => {
           countsByType[d.className] = (countsByType[d.className] || 0) + 1;
           detectionLogRef.current.push({ time: currentTime, type: d.className, confidence: d.confidence });
         });
       } catch (e) {
         console.error('Frame inference error:', e);
-      } finally {
-        tf.engine().endScope();
       }
 
       currentTime += interval;

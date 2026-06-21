@@ -63,7 +63,7 @@ export default function RecordView({ onHazardDetected, isRecording, setIsRecordi
       tf.engine().startScope();
       try {
         const tensor = tf.browser.fromPixels(videoRef.current)
-          .resizeBilinear([640, 640]).expandDims(0).toFloat().div(255.0);
+          .resizeBilinear([640, 640]).expandDims(0).toFloat();
         const predictions = await model.executeAsync(tensor);
         const detections = await parseYoloOutput(predictions, 0.5);
 

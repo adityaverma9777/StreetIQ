@@ -103,11 +103,26 @@ export default function App() {
   const nav = useNavigation(userLocation, speedKmh);
 
   useEffect(() => {
-    tf.ready().then(() => {
-      tf.loadGraphModel('/model/model.json')
-        .then(m => setModel(m))
-        .catch(e => console.error('Model load failed:', e));
-    });
+    async function loadModel() {
+      try {
+        await tf.setBackend('webgl');
+        await tf.ready();
+      } catch {
+        await tf.setBackend('wasm');
+        await tf.ready();
+      }
+      try {
+        const m = await tf.loadGraphModel('/model/model.json');
+        const warmup = tf.zeros([1, 640, 640, 3]);
+        const out = m.execute(warmup);
+        if (Array.isArray(out)) out.forEach(t => t.dispose()); else out.dispose();
+        warmup.dispose();
+        setModel(m);
+      } catch (e) {
+        console.error('Model load failed:', e);
+      }
+    }
+    loadModel();
   }, []);
 
   useEffect(() => {
