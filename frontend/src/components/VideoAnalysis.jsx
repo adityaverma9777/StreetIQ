@@ -191,10 +191,11 @@ export default function VideoAnalysis({ model }) {
   };
 
   const hazardEmoji = { crack: '⚡', pothole: '🕳️', waterlogging: '💧', debris: '🪨', unknown: '⚠️' };
+  const BUTTON_BAR_H = 70;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 3000, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'calc(env(safe-area-inset-top, 0px) + 16px) 20px 12px', background: 'rgba(18,18,18,0.95)', borderBottom: '0.5px solid rgba(84,84,88,0.4)' }}>
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 'calc(var(--bottom-bar-height) + var(--safe-bottom, 0px))', background: '#000', zIndex: 3000, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'calc(env(safe-area-inset-top, 0px) + 16px) 20px 12px', background: 'rgba(18,18,18,0.95)', borderBottom: '0.5px solid rgba(84,84,88,0.4)' }}>
         <div>
           <div style={{ fontSize: 17, fontWeight: 700, color: '#fff', fontFamily: 'Inter, sans-serif' }}>Analyse Your Road</div>
           <div style={{ fontSize: 12, color: 'rgba(235,235,245,0.45)', fontFamily: 'Inter, sans-serif', marginTop: 2 }}>
@@ -205,9 +206,7 @@ export default function VideoAnalysis({ model }) {
           <X size={16} color="rgba(235,235,245,0.8)" />
         </button>
       </div>
-
-      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: phase === 'idle' ? 'center' : 'flex-start', padding: 16, gap: 12 }}>
-
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: phase === 'idle' ? 'center' : 'flex-start', padding: 16, gap: 12 }}>
         {phase === 'idle' && (
           <label style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, width: '100%' }}>
             <input type="file" accept="video/*" onChange={handleFile} style={{ display: 'none' }} />
@@ -228,10 +227,9 @@ export default function VideoAnalysis({ model }) {
             {error && <div style={{ color: '#FF453A', fontSize: 13, fontFamily: 'Inter, sans-serif', textAlign: 'center' }}>{error}</div>}
           </label>
         )}
-
         {(phase === 'ready' || phase === 'processing' || phase === 'done') && (
           <>
-            <div style={{ width: '100%', borderRadius: 12, overflow: 'hidden', position: 'relative', background: '#111', aspectRatio: '16/9' }}>
+            <div style={{ width: '100%', borderRadius: 12, overflow: 'hidden', position: 'relative', background: '#111', aspectRatio: '16/9', maxHeight: `calc(100vh - ${BUTTON_BAR_H + 130}px)` }}>
               <video ref={videoRef} src={blobUrl} style={{ opacity: 0.01, position: 'absolute', width: 10, height: 10, pointerEvents: 'none' }} playsInline muted crossOrigin="anonymous" />
               <canvas ref={canvasRef} style={{ opacity: 0.01, position: 'absolute', width: 10, height: 10, pointerEvents: 'none' }} />
               <canvas ref={overlayRef} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', background: '#000' }} />
@@ -244,7 +242,6 @@ export default function VideoAnalysis({ model }) {
                 </div>
               )}
             </div>
-
             {phase === 'processing' && (
               <div style={{ width: '100%' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -259,7 +256,6 @@ export default function VideoAnalysis({ model }) {
                 </div>
               </div>
             )}
-
             {phase === 'done' && summary && (
               <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div style={{ background: 'rgba(28,28,30,0.9)', borderRadius: 14, padding: 16, border: '0.5px solid rgba(84,84,88,0.4)' }}>
@@ -287,36 +283,37 @@ export default function VideoAnalysis({ model }) {
                 </div>
               </div>
             )}
-
-            <div style={{ display: 'flex', gap: 10, width: '100%' }}>
-              {phase === 'ready' && (
-                <button
-                  onClick={startProcessing}
-                  disabled={!model}
-                  style={{ flex: 1, padding: '13px 0', borderRadius: 12, border: 'none', background: model ? '#0A84FF' : 'rgba(84,84,88,0.4)', color: 'white', fontSize: 15, fontWeight: 600, fontFamily: 'Inter, sans-serif', cursor: model ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-                >
-                  <Play size={16} fill="white" strokeWidth={0} />
-                  {model ? 'Start Analysis' : 'Loading AI model…'}
-                </button>
-              )}
-              {(phase === 'processing') && (
-                <button
-                  onClick={() => { cancelAnimationFrame(rafRef.current); setPhase('done'); setSummary({ countsByType: {}, total: detectionLogRef.current.length, duration: 0 }); }}
-                  style={{ flex: 1, padding: '13px 0', borderRadius: 12, border: 'none', background: '#FF453A', color: 'white', fontSize: 15, fontWeight: 600, fontFamily: 'Inter, sans-serif', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-                >
-                  <Square size={14} fill="white" strokeWidth={0} /> Stop
-                </button>
-              )}
-              <button
-                onClick={reset}
-                style={{ flex: phase === 'processing' ? 0.5 : 1, padding: '13px 0', borderRadius: 12, border: '0.5px solid rgba(84,84,88,0.5)', background: 'transparent', color: 'rgba(235,235,245,0.7)', fontSize: 15, fontFamily: 'Inter, sans-serif', cursor: 'pointer' }}
-              >
-                {phase === 'done' ? 'Analyse Another' : 'Change Video'}
-              </button>
-            </div>
           </>
         )}
       </div>
+      {(phase === 'ready' || phase === 'processing' || phase === 'done') && (
+        <div style={{ flexShrink: 0, padding: '12px 16px', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)', background: 'rgba(18,18,18,0.95)', borderTop: '0.5px solid rgba(84,84,88,0.4)', display: 'flex', gap: 10, zIndex: 1 }}>
+          {phase === 'ready' && (
+            <button
+              onClick={startProcessing}
+              disabled={!model}
+              style={{ flex: 1, padding: '13px 0', borderRadius: 12, border: 'none', background: model ? '#0A84FF' : 'rgba(84,84,88,0.4)', color: 'white', fontSize: 15, fontWeight: 600, fontFamily: 'Inter, sans-serif', cursor: model ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            >
+              <Play size={16} fill="white" strokeWidth={0} />
+              {model ? 'Start Analysis' : 'Loading AI model…'}
+            </button>
+          )}
+          {phase === 'processing' && (
+            <button
+              onClick={() => { cancelAnimationFrame(rafRef.current); setPhase('done'); setSummary({ countsByType: {}, total: detectionLogRef.current.length, duration: 0 }); }}
+              style={{ flex: 1, padding: '13px 0', borderRadius: 12, border: 'none', background: '#FF453A', color: 'white', fontSize: 15, fontWeight: 600, fontFamily: 'Inter, sans-serif', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            >
+              <Square size={14} fill="white" strokeWidth={0} /> Stop
+            </button>
+          )}
+          <button
+            onClick={reset}
+            style={{ flex: phase === 'processing' ? 0.5 : 1, padding: '13px 0', borderRadius: 12, border: '0.5px solid rgba(84,84,88,0.5)', background: 'transparent', color: 'rgba(235,235,245,0.7)', fontSize: 15, fontFamily: 'Inter, sans-serif', cursor: 'pointer' }}
+          >
+            {phase === 'done' ? 'Analyse Another' : 'Change Video'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
