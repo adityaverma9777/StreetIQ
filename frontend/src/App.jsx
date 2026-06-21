@@ -16,6 +16,7 @@ import { useNavigation } from './hooks/useNavigation';
 import { useGPSLocation } from './hooks/useGPSLocation';
 import { supabase, signInAnonymously } from './supabaseClient';
 import * as tf from '@tensorflow/tfjs';
+import { parseYoloOutput } from './utils/tfjsParser';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -213,13 +214,39 @@ export default function App() {
     }
   };
 
-  const capturePhoto = () => {
+  const capturePhoto = async () => {
     if (!liveCamRef.current || !liveCanvasRef.current) return;
     const canvas = liveCanvasRef.current;
     canvas.width = liveCamRef.current.videoWidth;
     canvas.height = liveCamRef.current.videoHeight;
     canvas.getContext('2d').drawImage(liveCamRef.current, 0, 0);
     canvas.toBlob(blob => setCapturedPhoto(blob), 'image/jpeg', 0.85);
+
+    if (model) {
+      try {
+        const predictions = tf.tidy(() => {
+          return model.execute(
+            tf.browser.fromPixels(canvas)
+              .resizeBilinear([640, 640]).expandDims(0).toFloat()
+          );
+        });
+        const detections = await parseYoloOutput(predictions, 0.2);
+        if (Array.isArray(predictions)) predictions.forEach(t => t.dispose());
+        else predictions.dispose();
+
+        if (detections.length > 0) {
+          const best = detections[0];
+          let type = 'pothole';
+          if (best.className.toLowerCase().includes('crack')) type = 'crack';
+          else if (best.className.toLowerCase().includes('pothole')) type = 'pothole';
+          
+          setManualType(type);
+          setManualSeverity(best.confidence > 0.8 ? 5 : best.confidence > 0.6 ? 4 : 3);
+        }
+      } catch (e) {
+        console.error('Photo inference error:', e);
+      }
+    }
   };
 
   const stopLiveCamera = () => {
