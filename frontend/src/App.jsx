@@ -74,9 +74,19 @@ function MapController({ center, isNavigating, heading }) {
 }
 
 const parseLocation = (loc, fallback) => {
-  if (typeof loc === 'string' && loc.startsWith('POINT')) {
+  if (!loc) return fallback;
+  if (typeof loc === 'string') {
     const m = loc.match(/POINT\(([-0-9.]+) ([-0-9.]+)\)/);
     if (m) return [parseFloat(m[2]), parseFloat(m[1])];
+    try {
+      const geo = JSON.parse(loc);
+      if (geo?.type === 'Point' && Array.isArray(geo.coordinates)) {
+        return [geo.coordinates[1], geo.coordinates[0]];
+      }
+    } catch {}
+  }
+  if (loc?.type === 'Point' && Array.isArray(loc.coordinates)) {
+    return [loc.coordinates[1], loc.coordinates[0]];
   }
   return fallback;
 };
