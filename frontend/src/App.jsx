@@ -73,9 +73,30 @@ function MapController({ center, isNavigating, heading }) {
   return null;
 }
 
+const parseWKBHex = (hex) => {
+  try {
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    }
+    const view = new DataView(bytes.buffer);
+    const le = view.getUint8(0) === 1;
+    const type = view.getUint32(1, le);
+    const hasSRID = (type & 0x20000000) !== 0;
+    const offset = 5 + (hasSRID ? 4 : 0);
+    const lon = view.getFloat64(offset, le);
+    const lat = view.getFloat64(offset + 8, le);
+    if (isFinite(lat) && isFinite(lon)) return [lat, lon];
+  } catch {}
+  return null;
+};
 const parseLocation = (loc, fallback) => {
   if (!loc) return fallback;
   if (typeof loc === 'string') {
+    if (/^[0-9a-fA-F]{10,}$/.test(loc)) {
+      const r = parseWKBHex(loc);
+      if (r) return r;
+    }
     const m = loc.match(/POINT\(([-0-9.]+) ([-0-9.]+)\)/);
     if (m) return [parseFloat(m[2]), parseFloat(m[1])];
     try {
