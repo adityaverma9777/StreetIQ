@@ -83,6 +83,7 @@ app.post('/api/gemini-analyze', upload.single('image'), async (req: Request, res
   }
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
+    logger.warn('GROQ_API_KEY not set - returning unavailable');
     res.json({ detected: false, unavailable: true, type: 'pothole', severity: 1, confidence: 0, description: '', boundingBox: null });
     return;
   }
