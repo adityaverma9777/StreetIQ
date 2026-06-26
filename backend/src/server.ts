@@ -82,7 +82,7 @@ app.post('/api/gemini-analyze', upload.single('image'), async (req: Request, res
   }
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    res.status(503).json({ error: 'Analysis service not configured' });
+    res.json({ detected: false, unavailable: true, type: 'pothole', severity: 1, confidence: 0, description: '', boundingBox: null });
     return;
   }
   try {
@@ -125,14 +125,15 @@ Rules:
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       logger.warn({ text }, 'no json found in groq response');
-      res.status(422).json({ error: 'Could not parse AI response' });
+      logger.warn({ text }, 'no json found in groq response');
+      res.json({ detected: false, unavailable: true, type: 'pothole', severity: 1, confidence: 0, description: '', boundingBox: null });
       return;
     }
     const parsed = JSON.parse(jsonMatch[0]);
     res.json(parsed);
   } catch (err) {
     logger.error({ err }, 'image analysis failed');
-    res.status(503).json({ error: 'Analysis failed' });
+    res.json({ detected: false, unavailable: true, type: 'pothole', severity: 1, confidence: 0, description: '', boundingBox: null });
   }
 });
 

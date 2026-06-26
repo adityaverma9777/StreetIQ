@@ -590,7 +590,7 @@ export default function App() {
               {!geminiLoading && geminiResult && !geminiResult.detected && (
                 <div className="gemini-warning-card">
                   <AlertTriangle size={16} color="#FF9F0A" />
-                  <span>No hazard detected by AI — you can still submit manually</span>
+                  <span>{geminiResult.unavailable ? 'AI analysis unavailable — select type manually' : 'No hazard detected by AI — you can still submit manually'}</span>
                 </div>
               )}
 
