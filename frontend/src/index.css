@@ -641,3 +641,210 @@ body {
   50% { transform: scale(1.15); opacity: 1; }
   100% { transform: scale(0.95); opacity: 0.6; }
 }
+
+.marker-photo {
+  opacity: 0.82;
+  border: 2px dashed rgba(255,255,255,0.5) !important;
+}
+
+.marker-water {
+  background: #0A84FF;
+  box-shadow: 0 2px 8px rgba(10, 132, 255, 0.6);
+}
+
+.marker-debris {
+  background: #8E8E93;
+  box-shadow: 0 2px 8px rgba(142, 142, 147, 0.6);
+}
+
+.marker-unverified-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(45deg);
+  color: white;
+  font-size: 11px;
+  font-weight: 800;
+  font-family: 'Inter', sans-serif;
+  line-height: 1;
+}
+
+.report-step-indicator {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(84,84,88,0.6);
+  transition: all 0.25s ease;
+}
+
+.step-dot.active {
+  background: var(--ios-blue);
+  width: 20px;
+  border-radius: 4px;
+  box-shadow: 0 0 8px rgba(10,132,255,0.5);
+}
+
+.step-dot.done {
+  background: var(--ios-green);
+}
+
+.photo-source-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px 12px;
+  background: rgba(10,132,255,0.1);
+  border: 1px solid rgba(10,132,255,0.3);
+  border-radius: var(--radius-md);
+  color: var(--ios-blue);
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.photo-source-btn:active {
+  transform: scale(0.96);
+  background: rgba(10,132,255,0.2);
+}
+
+.gemini-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: 'Inter', sans-serif;
+  backdrop-filter: blur(8px);
+}
+
+.gemini-badge-detected {
+  background: rgba(48,209,88,0.2);
+  color: #30D158;
+  border: 1px solid rgba(48,209,88,0.4);
+}
+
+.gemini-badge-none {
+  background: rgba(255,159,10,0.2);
+  color: #FF9F0A;
+  border: 1px solid rgba(255,159,10,0.4);
+}
+
+.autofill-badge {
+  margin-left: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #BF5AF2;
+  background: rgba(191,90,242,0.12);
+  border: 1px solid rgba(191,90,242,0.3);
+  border-radius: 10px;
+  padding: 1px 7px;
+  text-transform: none;
+  letter-spacing: 0;
+  vertical-align: middle;
+}
+
+.gemini-warning-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: rgba(255,159,10,0.08);
+  border: 1px solid rgba(255,159,10,0.25);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: rgba(235,235,245,0.75);
+  font-family: 'Inter', sans-serif;
+  margin-bottom: 4px;
+}
+
+.gps-quick-fill-btn {
+  margin-top: 10px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 12px;
+  background: rgba(10,132,255,0.1);
+  border: 1px solid rgba(10,132,255,0.3);
+  border-radius: var(--radius-sm);
+  color: var(--ios-blue);
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.gps-quick-fill-btn:active {
+  background: rgba(10,132,255,0.2);
+  transform: scale(0.97);
+}
+
+.location-pick-card {
+  transition: background 0.2s;
+}
+
+.location-pick-card:active {
+  background: var(--ios-bg3);
+}
+
+.submit-success-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(16px);
+  animation: fadeIn 0.2s ease;
+}
+
+.submit-success-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 48px;
+  background: var(--ios-bg2);
+  border: 0.5px solid rgba(84,84,88,0.4);
+  border-radius: 24px;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+}
+
+.success-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(48,209,88,0.2);
+  border: 2px solid #30D158;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: #30D158;
+  font-weight: 700;
+  animation: pulse 0.6s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+

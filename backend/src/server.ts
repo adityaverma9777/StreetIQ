@@ -6,6 +6,9 @@ import helmet from 'helmet';
 import cors from 'cors';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
+import multer from 'multer';
+import axios from 'axios';
+import sharp from 'sharp';
 import { logger } from './middleware/logger';
 import { RouteRequestSchema, GeocodeQuerySchema } from './middleware/validate';
 import { getRoute } from './services/routing';
@@ -22,6 +25,8 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: ALLOWED_ORIGINS, methods: ['GET', 'POST', 'OPTIONS'], credentials: true }));
 app.use(compression());
 app.use(express.json({ limit: '50kb' }));
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 app.use((req, _res, next) => {
   logger.info({ method: req.method, url: req.url }, 'request');
@@ -68,6 +73,71 @@ app.get('/api/geocode', async (req: Request, res: Response): Promise<void> => {
   } catch (err) {
     logger.error({ err }, 'geocoding failed');
     res.status(503).json({ error: 'Geocoding service unavailable' });
+  }
+});
+
+app.post('/api/gemini-analyze', upload.single('image'), async (req: Request, res: Response): Promise<void> => {
+  if (!req.file) {
+    res.status(400).json({ error: 'No image provided' });
+    return;
+  }
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    res.status(503).json({ error: 'Analysis service not configured' });
+    return;
+  }
+  try {
+    const resized = await sharp(req.file.buffer)
+      .resize({ width: 800, withoutEnlargement: true })
+      .jpeg({ quality: 75 })
+      .toBuffer();
+    const base64 = resized.toString('base64');
+    const mimeType = 'image/jpeg';
+    const prompt = `You are an expert road hazard detection AI. Look carefully at this road image.
+
+Your task: detect if there is a pothole, road crack, waterlogging, or debris visible.
+
+You MUST respond with ONLY this JSON (no markdown fences, no extra text):
+{"detected":true,"type":"pothole","severity":4,"confidence":0.92,"description":"Large pothole with water","boundingBox":{"x":0.2,"y":0.3,"w":0.4,"h":0.3}}
+
+Rules:
+- detected: true if ANY road damage is visible, false only if road is perfectly fine
+- type: one of pothole / crack / waterlogging / debris
+- severity: 1=minor scratch, 5=vehicle-damaging
+- confidence: your certainty 0.0-1.0
+- boundingBox: approximate location of hazard (0-1 scale), null if unsure
+- If detected is false, still return all fields with type="pothole", severity=1, confidence=0, boundingBox=null`;
+    const response = await axios.post(
+      'https://api.groq.com/openai/v1/chat/completions',
+      {
+        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
+              { type: 'text', text: prompt },
+            ],
+          },
+        ],
+        max_tokens: 300,
+        temperature: 0.1,
+      },
+      { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' } }
+    );
+    const text = response.data.choices[0]?.message?.content?.trim() || '';
+    logger.info({ rawText: text }, 'groq raw response');
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      logger.warn({ text }, 'no json found in groq response');
+      res.status(422).json({ error: 'Could not parse AI response' });
+      return;
+    }
+    const parsed = JSON.parse(jsonMatch[0]);
+    res.json(parsed);
+  } catch (err) {
+    logger.error({ err }, 'image analysis failed');
+    res.status(503).json({ error: 'Analysis failed' });
   }
 });
 
