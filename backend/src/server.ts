@@ -8,7 +8,6 @@ import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import multer from 'multer';
 import axios from 'axios';
-import sharp from 'sharp';
 import { logger } from './middleware/logger';
 import { RouteRequestSchema, GeocodeQuerySchema } from './middleware/validate';
 import { getRoute } from './services/routing';
@@ -87,12 +86,8 @@ app.post('/api/gemini-analyze', upload.single('image'), async (req: Request, res
     return;
   }
   try {
-    const resized = await sharp(req.file.buffer)
-      .resize({ width: 800, withoutEnlargement: true })
-      .jpeg({ quality: 75 })
-      .toBuffer();
-    const base64 = resized.toString('base64');
-    const mimeType = 'image/jpeg';
+    const base64 = req.file.buffer.toString('base64');
+    const mimeType = req.file.mimetype || 'image/jpeg';
     const prompt = `You are an expert road hazard detection AI. Look carefully at this road image.
 
 Your task: detect if there is a pothole, road crack, waterlogging, or debris visible.
