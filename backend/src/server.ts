@@ -24,6 +24,7 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: ALLOWED_ORIGINS, methods: ['GET', 'POST', 'OPTIONS'], credentials: true }));
 app.use(compression());
 app.use(express.json({ limit: '50kb' }));
+app.set('trust proxy', 1);
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
