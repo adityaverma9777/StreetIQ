@@ -329,7 +329,7 @@ export default function App() {
       if (!uploadErr && uploadData) {
         imageUrl = supabase.storage.from('hazard-images').getPublicUrl(fileName).data.publicUrl;
       }
-      const { data: rpcData } = await supabase.rpc('report_hazard_photo', {
+      const { data: rpcData, error: rpcErr } = await supabase.rpc('report_hazard_photo', {
         p_type: manualType,
         p_lat: loc.lat,
         p_lon: loc.lon,
@@ -337,6 +337,7 @@ export default function App() {
         p_confidence: geminiResult?.confidence || 0.5,
         p_image_url: imageUrl,
       });
+      if (rpcErr) throw rpcErr;
       if (rpcData) {
         setHazards(prev => prev.map(h => h.id === optimisticId ? { ...optimisticHazard, id: rpcData, image_url: imageUrl } : h));
       }
@@ -345,9 +346,10 @@ export default function App() {
         resetReportForm();
         setActiveTab('map');
       }, 1800);
-    } catch {
+    } catch (err) {
+      console.error('Report submission error:', err);
       setHazards(prev => prev.filter(h => h.id !== optimisticId));
-      alert('Submission failed. Please try again.');
+      alert(`Submission failed: ${err?.message || err}`);
     } finally {
       setIsUploading(false);
     }
