@@ -5,6 +5,56 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { Search, X, LocateFixed, Check, MapPin } from 'lucide-react';
 
+function SearchDropdown({ anchorRef, results, onSelect }) {
+  const [rect, setRect] = useState(null);
+  useEffect(() => {
+    if (!anchorRef.current) return;
+    const update = () => setRect(anchorRef.current.getBoundingClientRect());
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [anchorRef]);
+  if (!rect) return null;
+  return createPortal(
+    <div style={{
+      position: 'fixed',
+      top: rect.bottom + 6,
+      left: rect.left,
+      width: rect.width,
+      background: 'rgba(28,28,30,0.98)',
+      backdropFilter: 'blur(20px)',
+      border: '0.5px solid rgba(84,84,88,0.6)',
+      borderRadius: 12,
+      overflow: 'hidden',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+      zIndex: 999999,
+    }}>
+      {results.map((r, i) => (
+        <button
+          key={i}
+          onMouseDown={(e) => { e.preventDefault(); onSelect(r); }}
+          style={{
+            width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+            padding: '10px 14px', background: 'transparent', border: 'none',
+            borderBottom: i < results.length - 1 ? '0.5px solid rgba(84,84,88,0.35)' : 'none',
+            cursor: 'pointer', textAlign: 'left',
+          }}
+        >
+          <MapPin size={14} color="#0A84FF" style={{ flexShrink: 0 }} />
+          <span style={{ color: '#fff', fontSize: 13, fontFamily: 'Inter, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {r.display_name}
+          </span>
+        </button>
+      ))}
+    </div>,
+    document.body
+  );
+}
+
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
 const pickerIcon = L.divIcon({
@@ -57,6 +107,7 @@ export default function LocationPickerModal({ initialLocation, onConfirm, onClos
   const [isSearching, setIsSearching] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const debounceRef = useRef(null);
+  const searchInputRef = useRef(null);
 
   const handleSearch = useCallback(async (q) => {
     if (q.length < 2) { setSearchResults([]); setSearchOpen(false); return; }
@@ -161,7 +212,7 @@ export default function LocationPickerModal({ initialLocation, onConfirm, onClos
             </button>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ position: 'relative', flex: 1 }}>
+            <div ref={searchInputRef} style={{ position: 'relative', flex: 1 }}>
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 background: 'rgba(44,44,46,0.9)',
@@ -186,30 +237,11 @@ export default function LocationPickerModal({ initialLocation, onConfirm, onClos
                 )}
               </div>
               {searchOpen && searchResults.length > 0 && (
-                <div style={{
-                  position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 6,
-                  background: 'rgba(28,28,30,0.98)', backdropFilter: 'blur(20px)',
-                  border: '0.5px solid rgba(84,84,88,0.6)', borderRadius: 12,
-                  overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.6)', zIndex: 100,
-                }}>
-                  {searchResults.map((r, i) => (
-                    <button
-                      key={i}
-                      onClick={() => handleResultSelect(r)}
-                      style={{
-                        width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '10px 14px', background: 'transparent', border: 'none',
-                        borderBottom: i < searchResults.length - 1 ? '0.5px solid rgba(84,84,88,0.35)' : 'none',
-                        cursor: 'pointer', textAlign: 'left',
-                      }}
-                    >
-                      <MapPin size={14} color="#0A84FF" style={{ flexShrink: 0 }} />
-                      <span style={{ color: '#fff', fontSize: 13, fontFamily: 'Inter, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {r.display_name}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+                <SearchDropdown
+                  anchorRef={searchInputRef}
+                  results={searchResults}
+                  onSelect={handleResultSelect}
+                />
               )}
             </div>
             <button
