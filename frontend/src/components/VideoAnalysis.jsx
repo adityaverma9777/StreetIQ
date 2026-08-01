@@ -114,24 +114,22 @@ export default function VideoAnalysis({ model, onClose }) {
       }
       drawFrameIdRef.current = requestAnimationFrame(drawLoop);
     };
-    let inferBusy = false;
+    let inferRunning = false;
     const inferenceLoop = async () => {
       if (stoppedRef.current || videoRef.current.paused || videoRef.current.ended) return;
-      if (inferBusy) {
-        requestAnimationFrame(inferenceLoop);
-        return;
-      }
-      inferBusy = true;
+      if (inferRunning) return;
+      inferRunning = true;
       try {
-        const predictions = tf.tidy(() => {
-          return model.execute(
+        const isGpu = tf.getBackend() === 'webgl' || tf.getBackend() === 'webgpu';
+        const predictions = tf.tidy(() =>
+          model.execute(
             tf.browser.fromPixels(videoRef.current)
               .resizeBilinear([640, 640])
               .expandDims(0)
               .toFloat()
               .div(255.0)
-          );
-        });
+          )
+        );
         const detections = await parseYoloOutputAll(predictions, 0.10);
         if (Array.isArray(predictions)) predictions.forEach(t => t.dispose());
         else predictions.dispose();
@@ -150,12 +148,13 @@ export default function VideoAnalysis({ model, onClose }) {
           setFps(Math.round((fpsCounterRef.current.frames / elapsed) * 1000));
           fpsCounterRef.current = { frames: 0, lastTime: now };
         }
+        inferRunning = false;
+        if (!stoppedRef.current && !videoRef.current.paused && !videoRef.current.ended) {
+          setTimeout(inferenceLoop, isGpu ? 0 : 100);
+        }
       } catch (e) {
         console.error('Frame inference error:', e);
-      }
-      inferBusy = false;
-      if (!stoppedRef.current && !videoRef.current.paused && !videoRef.current.ended) {
-        requestAnimationFrame(inferenceLoop);
+        inferRunning = false;
       }
     };
     drawFrameIdRef.current = requestAnimationFrame(drawLoop);

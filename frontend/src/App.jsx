@@ -230,33 +230,33 @@ export default function App() {
   const voice = useVoiceAssistant(handleVoiceIntent);
 
   useEffect(() => {
-    async function loadModel() {
-      let backend = 'cpu';
-      const backends = ['webgpu', 'webgl', 'wasm', 'cpu'];
-      for (const b of backends) {
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      if (cancelled) return;
+      const tryBackend = async (name) => {
         try {
-          await tf.setBackend(b);
-          await tf.ready();
-          backend = b;
-          break;
-        } catch { continue; }
+          await tf.setBackend(name);
+          await Promise.race([
+            tf.ready(),
+            new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 4000)),
+          ]);
+          return true;
+        } catch { return false; }
+      };
+      let ready = false;
+      for (const b of ['webgl', 'wasm', 'cpu']) {
+        ready = await tryBackend(b);
+        if (ready) { console.log(`[StreetIQ] TF backend: ${b}`); break; }
       }
-      console.log(`[StreetIQ] TF.js backend: ${backend} | GPU: ${backend === 'webgpu' || backend === 'webgl'}`);
+      if (!ready || cancelled) { console.warn('[StreetIQ] No TF backend — AI scan disabled'); return; }
       try {
         const m = await tf.loadGraphModel('/model/model.json?v=3');
-        for (let i = 0; i < 3; i++) {
-          const warmup = tf.zeros([1, 640, 640, 3]);
-          const out = m.execute(warmup);
-          if (Array.isArray(out)) out.forEach(t => t.dispose()); else out.dispose();
-          warmup.dispose();
-        }
-        setModel(m);
-        console.log(`[StreetIQ] Model loaded & warmed up on ${backend}`);
+        if (!cancelled) { setModel(m); console.log('[StreetIQ] Model ready'); }
       } catch (e) {
-        console.error('Model load failed:', e);
+        console.warn('[StreetIQ] Model load failed:', e.message);
       }
-    }
-    loadModel();
+    }, 2000);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, []);
 
   useEffect(() => {
@@ -270,22 +270,27 @@ export default function App() {
   }, [gpsLocation]);
 
   useEffect(() => {
+    let channel;
     async function init() {
-      await signInAnonymously();
-      const { data } = await supabase.from('hazards').select('*');
-      if (data) setHazards(data.filter(h => h.status === 'verified' || (h.source === 'photo' && h.status === 'under_review')));
-      const channel = supabase.channel(`hazards_channel_${Date.now()}`)
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hazards' }, p => {
-          const h = p.new;
-          if (h.status === 'verified' || (h.source === 'photo' && h.status === 'under_review')) {
-            setHazards(prev => [...prev, h]);
-          }
-        })
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hazards' }, p => setHazards(prev => prev.map(h => h.id === p.new.id ? p.new : h)))
-        .subscribe();
-      return () => supabase.removeChannel(channel);
+      try { await signInAnonymously(); } catch {}
+      try {
+        const { data } = await supabase.from('hazards').select('*');
+        if (data) setHazards(data.filter(h => h.status === 'verified' || (h.source === 'photo' && h.status === 'under_review')));
+      } catch {}
+      try {
+        channel = supabase.channel(`hazards_channel_${Date.now()}`)
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hazards' }, p => {
+            const h = p.new;
+            if (h.status === 'verified' || (h.source === 'photo' && h.status === 'under_review')) {
+              setHazards(prev => [...prev, h]);
+            }
+          })
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'hazards' }, p => setHazards(prev => prev.map(h => h.id === p.new.id ? p.new : h)))
+          .subscribe();
+      } catch {}
     }
     init();
+    return () => { if (channel) supabase.removeChannel(channel); };
   }, []);
 
   const goToLiveLocation = () => {
@@ -523,18 +528,25 @@ export default function App() {
 
         <MapContainer ref={mapRef} center={initialPosition} zoom={13} zoomControl={false} style={{ height: '100%', width: '100%' }}>
           <MapController center={userLocation} isNavigating={nav.isNavigating} heading={nav.heading} />
+        <TileLayer
+            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
+            attribution="&copy; OpenStreetMap &copy; CARTO"
+            subdomains="abcd"
+            maxZoom={19}
+            crossOrigin="anonymous"
+          />
           <LayersControl position="bottomright">
             <LayersControl.BaseLayer checked name="Dark">
-              <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution="&copy; OpenStreetMap" />
+              <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" subdomains="abcd" maxZoom={19} crossOrigin="anonymous" />
             </LayersControl.BaseLayer>
             <LayersControl.BaseLayer name="Light">
-              <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" attribution="&copy; OpenStreetMap" />
+              <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" subdomains="abcd" maxZoom={19} crossOrigin="anonymous" />
             </LayersControl.BaseLayer>
             <LayersControl.BaseLayer name="Satellite">
-              <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" attribution="Tiles &copy; Esri" />
+              <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" attribution="Tiles &copy; Esri" crossOrigin="anonymous" />
             </LayersControl.BaseLayer>
             <LayersControl.BaseLayer name="Terrain">
-              <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}" attribution="Tiles &copy; Esri" />
+              <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}" attribution="Tiles &copy; Esri" crossOrigin="anonymous" />
             </LayersControl.BaseLayer>
           </LayersControl>
           <ZoomControl position="bottomleft" />
