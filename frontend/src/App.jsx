@@ -259,6 +259,15 @@ export default function App() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, []);
 
+  // Wake up the backend server on Render (free tier)
+  useEffect(() => {
+    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+    fetch(`${BACKEND_URL}/health`)
+      .then(res => res.json())
+      .then(data => console.log('[StreetIQ] Backend woke up:', data.status))
+      .catch(err => console.warn('[StreetIQ] Wake request failed:', err));
+  }, []);
+
   useEffect(() => {
     if (!gpsLocation) return;
     currentPositionRef.current = gpsLocation;
