@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
-const STEP_ADVANCE_RADIUS_M = 30;
+const OSRM_BASE = 'https://router.project-osrm.org';
+const INDIA_TRAFFIC_FACTOR = 1.8;
+const INDIA_TRAFFIC_FACTOR_HEAVY = 2.4;
 
 function haversine(a, b) {
   const R = 6371000;
@@ -15,7 +16,7 @@ function haversine(a, b) {
 
 function getManeuverIcon(maneuver) {
   if (!maneuver) return '↑';
-  const { type, modifier, bearing_after } = maneuver;
+  const { type, modifier } = maneuver;
   if (type === 'arrive') return '🏁';
   if (type === 'depart') return '🚀';
   if (type === 'roundabout' || type === 'rotary') return '🔄';
@@ -31,6 +32,29 @@ function getManeuverIcon(maneuver) {
   if (modifier === 'sharp right') return '↱';
   if (modifier === 'uturn') return '↩';
   return '↑';
+}
+
+function bearingToCompass(bearing) {
+  const dirs = ['north','northeast','east','southeast','south','southwest','west','northwest'];
+  return dirs[Math.round(((bearing % 360) + 360) % 360 / 45) % 8];
+}
+
+function buildInstruction(step) {
+  const { maneuver, name } = step;
+  const roadName = name ? `onto ${name}` : '';
+  const { type, modifier } = maneuver;
+  if (type === 'depart') return `Head ${maneuver.bearing_after !== undefined ? bearingToCompass(maneuver.bearing_after) : (modifier || 'forward')}${name ? ` on ${name}` : ''}`;
+  if (type === 'arrive') return 'You have arrived at your destination';
+  if (type === 'turn') return `Turn ${modifier} ${roadName}`;
+  if (type === 'new name') return `Continue ${modifier || 'straight'} ${roadName}`;
+  if (type === 'continue') return `Continue straight ${roadName}`;
+  if (type === 'merge') return `Merge ${modifier} ${roadName}`;
+  if (type === 'on ramp') return `Take the ramp ${modifier} ${roadName}`;
+  if (type === 'off ramp') return `Take exit ${modifier} ${roadName}`;
+  if (type === 'fork') return `Keep ${modifier} at the fork ${roadName}`;
+  if (type === 'end of road') return `Turn ${modifier} at end of road ${roadName}`;
+  if (type === 'roundabout' || type === 'rotary') return `At the roundabout, take ${maneuver.exit ? `exit ${maneuver.exit} ` : ''}${roadName}`;
+  return `Continue ${roadName}`;
 }
 
 export function useNavigation(userLocation, speedKmh = 0) {
@@ -54,22 +78,43 @@ export function useNavigation(userLocation, speedKmh = 0) {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/route`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ start, end }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Routing failed');
-      }
+      const [startLat, startLng] = start;
+      const [endLat, endLng] = end;
+      const url = `${OSRM_BASE}/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson&steps=true`;
+      const res = await fetch(url);
       const data = await res.json();
-      setRoute(data.geometry);
-      setSteps(data.steps);
-      setRouteData(data);
-      stepsRef.current = data.steps;
-      setEta(Math.round(data.duration / 60));
-      return data;
+      if (data.code !== 'Ok' || !data.routes?.length) throw new Error('No route found between these points');
+      const osrmRoute = data.routes[0];
+      const geometry = osrmRoute.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+      const steps = [];
+      for (const leg of osrmRoute.legs) {
+        for (const step of leg.steps) {
+          const loc = step.maneuver.location;
+          steps.push({
+            instruction: buildInstruction(step),
+            distance: Math.round(step.distance),
+            duration: Math.round(step.duration * INDIA_TRAFFIC_FACTOR),
+            maneuver: { type: step.maneuver.type, modifier: step.maneuver.modifier, bearing_after: step.maneuver.bearing_after },
+            maneuver_location: [loc[1], loc[0]],
+            name: step.name || '',
+          });
+        }
+      }
+      const rawDuration = osrmRoute.duration;
+      const routeResult = {
+        geometry,
+        steps,
+        distance: Math.round(osrmRoute.distance),
+        duration: Math.round(rawDuration * INDIA_TRAFFIC_FACTOR),
+        duration_optimistic: Math.round(rawDuration * 1.3),
+        duration_pessimistic: Math.round(rawDuration * INDIA_TRAFFIC_FACTOR_HEAVY),
+      };
+      setRoute(geometry);
+      setSteps(steps);
+      setRouteData(routeResult);
+      stepsRef.current = steps;
+      setEta(Math.round(routeResult.duration / 60));
+      return routeResult;
     } catch (e) {
       setError(e.message);
       return null;
