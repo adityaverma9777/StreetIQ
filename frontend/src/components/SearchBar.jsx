@@ -1,8 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Search, X, MapPin } from 'lucide-react';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
-
 export default function SearchBar({ onDestinationSelect, onClear }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -15,9 +13,18 @@ export default function SearchBar({ onDestinationSelect, onClear }) {
     if (q.length < 2) { setResults([]); setIsOpen(false); return; }
     setIsLoading(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/geocode?q=${encodeURIComponent(q)}&limit=5`);
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&addressdetails=1`,
+        { headers: { 'Accept-Language': 'en', 'User-Agent': 'StreetIQ/1.0' } }
+      );
       const data = await res.json();
-      setResults(Array.isArray(data) ? data : []);
+      const mapped = data.map(item => ({
+        display_name: item.display_name,
+        lat: parseFloat(item.lat),
+        lon: parseFloat(item.lon),
+        type: item.type || 'place',
+      }));
+      setResults(mapped);
       setIsOpen(true);
     } catch {
       setResults([]);
