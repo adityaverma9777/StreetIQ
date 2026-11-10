@@ -157,7 +157,7 @@ export default function VideoAnalysis({ model, onClose }) {
         }
         inferRunning = false;
         if (!stoppedRef.current && !videoRef.current.paused && !videoRef.current.ended) {
-          setTimeout(inferenceLoop, isGpu ? 0 : 100);
+          setTimeout(inferenceLoop, GPU_BACKENDS.includes(tf.getBackend()) ? 0 : 100);
         }
       } catch (e) {
         console.error('Frame inference error:', e);

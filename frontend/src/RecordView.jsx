@@ -103,7 +103,7 @@ export default function RecordView({ onHazardDetected, isRecording, setIsRecordi
   return (
     <div className="camera-overlay">
       {showVideoAnalysis && (
-        <VideoAnalysis model={model} />
+        <VideoAnalysis model={model} onClose={() => setShowVideoAnalysis(false)} />
       )}
       <div className="camera-view">
         <video ref={videoRef} autoPlay playsInline muted style={{ display: permissionGranted ? 'block' : 'none' }} />
@@ -142,6 +142,12 @@ export default function RecordView({ onHazardDetected, isRecording, setIsRecordi
       </div>
       {permissionGranted && (
         <div className="camera-controls">
+          <button
+            onClick={() => setShowVideoAnalysis(true)}
+            style={{ background: 'rgba(0,0,0,0.5)', border: '0.5px solid rgba(84,84,88,0.5)', color: 'rgba(235,235,245,0.7)', fontSize: 13, fontFamily: 'Inter, sans-serif', cursor: 'pointer', padding: '10px 14px', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <Film size={14} /> How We Work
+          </button>
           <button className={`btn-record ${isRecording ? 'stop' : 'start'}`} onClick={() => setIsRecording(!isRecording)}>
             {isRecording ? <Square size={18} fill="white" strokeWidth={0} /> : <Play size={18} fill="white" strokeWidth={0} />}
             {isRecording ? 'Stop Scan' : 'Start Scan'}
