@@ -20,3 +20,10 @@ PRESENTATION_SCRIPT.md
 submission.md
 video_script.md
 calibration_image_sample_data_20x128x128x3_float32.npy
+
+# Local-only files
+.agents/
+Training material/
+demo_video_detections/
+run_frame_analysis.py
+skills-lock.json
