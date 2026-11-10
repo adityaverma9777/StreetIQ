@@ -230,25 +230,23 @@ export default function App() {
   const voice = useVoiceAssistant(handleVoiceIntent);
 
   useEffect(() => {
+    let cancelled = false;
     async function loadModel() {
-      let backend = 'cpu';
       const gpuBackends = ['webgpu', 'webgl'];
       const allBackends = ['webgpu', 'webgl', 'wasm', 'cpu'];
+      let backend = 'cpu';
       for (const b of allBackends) {
         try {
-          await tf.setBackend(name);
+          await tf.setBackend(b);
           await Promise.race([
             tf.ready(),
             new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 4000)),
           ]);
-          return true;
-        } catch { return false; }
-      };
-      let ready = false;
-      for (const b of ['webgl', 'wasm', 'cpu']) {
-        ready = await tryBackend(b);
-        if (ready) { console.log(`[StreetIQ] TF backend: ${b}`); break; }
+          backend = b;
+          break;
+        } catch {}
       }
+      if (cancelled) return;
       if (gpuBackends.includes(backend)) {
         try {
           tf.env().set('WEBGL_PACK', true);
@@ -268,13 +266,16 @@ export default function App() {
           });
           if (Array.isArray(warmup)) warmup.forEach(t => t.dispose()); else warmup.dispose();
         }
-        setModel(m);
-        console.log(`[StreetIQ] YOLOv8m loaded & warmed up on ${backend}`);
+        if (!cancelled) {
+          setModel(m);
+          console.log(`[StreetIQ] YOLOv8m loaded & warmed up on ${backend}`);
+        }
       } catch (e) {
         console.warn('[StreetIQ] Model load failed:', e.message);
       }
-    }, 2000);
-    return () => { cancelled = true; clearTimeout(timer); };
+    }
+    loadModel();
+    return () => { cancelled = true; };
   }, []);
 
   // Wake up the backend server on Render (free tier)
