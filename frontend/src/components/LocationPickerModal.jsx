@@ -270,7 +270,7 @@ export default function LocationPickerModal({ initialLocation, onConfirm, onClos
             zoomControl={false}
             style={{ height: '100%', width: '100%' }}
           >
-            <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap contributors" className="osm-dark-tiles" />
             <FlyTo target={flyTarget} />
             <DraggableMarker position={markerPos} onMove={(ll) => setMarkerPos([ll.lat, ll.lng])} />
           </MapContainer>

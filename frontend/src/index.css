@@ -74,6 +74,10 @@ body {
   display: none !important;
 }
 
+.osm-dark-tiles {
+  filter: invert(100%) hue-rotate(180deg) brightness(90%) contrast(85%) saturate(0.6);
+}
+
 .leaflet-control-zoom {
   border: none !important;
   background: transparent !important;

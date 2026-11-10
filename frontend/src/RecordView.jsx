@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Camera, Play, Square, Film } from 'lucide-react';
 import * as tf from '@tensorflow/tfjs';
-import { parseYoloOutput } from './utils/tfjsParser';
+import { parseYoloOutput, runInference } from './utils/tfjsParser';
 import { supabase } from './supabaseClient';
 import { useMotionGate } from './hooks/useMotionGate';
 import VideoAnalysis from './components/VideoAnalysis';
@@ -61,13 +61,8 @@ export default function RecordView({ onHazardDetected, isRecording, setIsRecordi
       if (!videoRef.current || videoRef.current.readyState !== 4) return;
       const inferenceStart = performance.now();
       try {
-        const predictions = tf.tidy(() => {
-          return model.execute(
-            tf.browser.fromPixels(videoRef.current)
-              .resizeBilinear([640, 640]).expandDims(0).toFloat().div(255.0)
-          );
-        });
-        const detections = await parseYoloOutput(predictions, 0.5);
+        const predictions = runInference(model, videoRef.current);
+        const detections = await parseYoloOutput(predictions, 0.25);
         if (Array.isArray(predictions)) predictions.forEach(t => t.dispose());
         else predictions.dispose();
         if (detections.length > 0 && userLocation) {

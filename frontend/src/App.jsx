@@ -230,10 +230,11 @@ export default function App() {
   const voice = useVoiceAssistant(handleVoiceIntent);
 
   useEffect(() => {
-    let cancelled = false;
-    const timer = setTimeout(async () => {
-      if (cancelled) return;
-      const tryBackend = async (name) => {
+    async function loadModel() {
+      let backend = 'cpu';
+      const gpuBackends = ['webgpu', 'webgl'];
+      const allBackends = ['webgpu', 'webgl', 'wasm', 'cpu'];
+      for (const b of allBackends) {
         try {
           await tf.setBackend(name);
           await Promise.race([
@@ -248,10 +249,27 @@ export default function App() {
         ready = await tryBackend(b);
         if (ready) { console.log(`[StreetIQ] TF backend: ${b}`); break; }
       }
-      if (!ready || cancelled) { console.warn('[StreetIQ] No TF backend — AI scan disabled'); return; }
+      if (gpuBackends.includes(backend)) {
+        try {
+          tf.env().set('WEBGL_PACK', true);
+          tf.env().set('WEBGL_LAZILY_UNPACK', true);
+          tf.env().set('WEBGL_CONV_IM2COL', true);
+          tf.env().set('WEBGL_FORCE_F16_TEXTURES', false);
+          tf.env().set('WEBGL_FLUSH_THRESHOLD', -1);
+        } catch {}
+      }
+      console.log(`[StreetIQ] TF.js backend: ${backend} | GPU: ${gpuBackends.includes(backend)}`);
       try {
-        const m = await tf.loadGraphModel('/model/model.json?v=3');
-        if (!cancelled) { setModel(m); console.log('[StreetIQ] Model ready'); }
+        const m = await tf.loadGraphModel('/model/model.json?v=4');
+        for (let i = 0; i < 5; i++) {
+          const warmup = tf.tidy(() => {
+            const inp = tf.zeros([1, 640, 640, 3]);
+            return m.execute({ images: inp });
+          });
+          if (Array.isArray(warmup)) warmup.forEach(t => t.dispose()); else warmup.dispose();
+        }
+        setModel(m);
+        console.log(`[StreetIQ] YOLOv8m loaded & warmed up on ${backend}`);
       } catch (e) {
         console.warn('[StreetIQ] Model load failed:', e.message);
       }
@@ -267,6 +285,7 @@ export default function App() {
       .then(data => console.log('[StreetIQ] Backend woke up:', data.status))
       .catch(err => console.warn('[StreetIQ] Wake request failed:', err));
   }, []);
+
 
   useEffect(() => {
     if (!gpsLocation) return;
@@ -537,19 +556,12 @@ export default function App() {
 
         <MapContainer ref={mapRef} center={initialPosition} zoom={13} zoomControl={false} style={{ height: '100%', width: '100%' }}>
           <MapController center={userLocation} isNavigating={nav.isNavigating} heading={nav.heading} />
-        <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
-            attribution="&copy; OpenStreetMap &copy; CARTO"
-            subdomains="abcd"
-            maxZoom={19}
-            crossOrigin="anonymous"
-          />
           <LayersControl position="bottomright">
             <LayersControl.BaseLayer checked name="Dark">
-              <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" subdomains="abcd" maxZoom={19} crossOrigin="anonymous" />
+              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap contributors" className="osm-dark-tiles" />
             </LayersControl.BaseLayer>
             <LayersControl.BaseLayer name="Light">
-              <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" subdomains="abcd" maxZoom={19} crossOrigin="anonymous" />
+              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap contributors" />
             </LayersControl.BaseLayer>
             <LayersControl.BaseLayer name="Satellite">
               <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" attribution="Tiles &copy; Esri" crossOrigin="anonymous" />

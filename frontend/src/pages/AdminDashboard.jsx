@@ -253,7 +253,7 @@ function AreaMapPicker({ onAreaChange }) {
           dragging={mode === 'hand'}
           style={{ height: '100%', width: '100%' }}
         >
-          <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap contributors" className="osm-dark-tiles" />
           <ZoomController />
           <DrawHandler
             mode={mode}

@@ -1,25 +1,40 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { Play, Square, X, Film, Activity, Cpu, Zap } from 'lucide-react';
 import * as tf from '@tensorflow/tfjs';
-import { parseYoloOutputAll } from '../utils/tfjsParser';
+import { parseYoloOutputAll, runInference } from '../utils/tfjsParser';
 
 const LABEL_COLORS = {
+  'Longitudinal Crack': '#007AFF',
+  'Transverse Crack': '#5E5CE6',
+  'Alligator Crack': '#FF9F0A',
+  'Pothole': '#FF453A',
   crack: '#007AFF',
   pothole: '#FF453A',
-  waterlogging: '#30D158',
-  debris: '#FF9F0A',
-  unknown: '#007AFF',
+  unknown: '#8E8E93',
 };
 
+const LABEL_EMOJI = {
+  'Longitudinal Crack': '━',
+  'Transverse Crack': '┃',
+  'Alligator Crack': '⚡',
+  'Pothole': '🕳️',
+  crack: '⚡',
+  pothole: '🕳️',
+  unknown: '⚠️',
+};
+
+const GPU_BACKENDS = ['webgpu', 'webgl'];
+
 function drawDetections(ctx, detections, canvasW, canvasH) {
-  detections.forEach(({ className, confidence, bbox }) => {
+  detections.forEach(({ displayLabel, className, confidence, bbox }) => {
     if (!bbox) return;
     const { cx, cy, w, h } = bbox;
     const x = ((cx - w / 2) / 640) * canvasW;
     const y = ((cy - h / 2) / 640) * canvasH;
     const bw = (w / 640) * canvasW;
     const bh = (h / 640) * canvasH;
-    const color = LABEL_COLORS[className] || '#007AFF';
+    const labelKey = displayLabel || className;
+    const color = LABEL_COLORS[labelKey] || LABEL_COLORS[className] || '#007AFF';
     ctx.strokeStyle = color;
     ctx.lineWidth = 2.5;
     ctx.strokeRect(x, y, bw, bh);
@@ -27,7 +42,7 @@ function drawDetections(ctx, detections, canvasW, canvasH) {
     ctx.globalAlpha = 0.12;
     ctx.fillRect(x, y, bw, bh);
     ctx.globalAlpha = 1;
-    const label = `${className} ${Math.round(confidence * 100)}%`;
+    const label = `${labelKey} ${Math.round(confidence * 100)}%`;
     ctx.font = 'bold 11px Inter, system-ui, sans-serif';
     const textW = ctx.measureText(label).width;
     const labelH = 18;
@@ -56,8 +71,8 @@ export default function VideoAnalysis({ model, onClose }) {
 
   useEffect(() => {
     const b = tf.getBackend();
-    const isGpu = b === 'webgpu' || b === 'webgl';
-    setBackendInfo(isGpu ? `GPU (${b})` : `CPU (${b})`);
+    const isGpu = GPU_BACKENDS.includes(b);
+    setBackendInfo(isGpu ? `GPU · ${b}` : `CPU · ${b}`);
   }, []);
 
   const cleanup = useCallback(() => {
@@ -120,17 +135,8 @@ export default function VideoAnalysis({ model, onClose }) {
       if (inferRunning) return;
       inferRunning = true;
       try {
-        const isGpu = tf.getBackend() === 'webgl' || tf.getBackend() === 'webgpu';
-        const predictions = tf.tidy(() =>
-          model.execute(
-            tf.browser.fromPixels(videoRef.current)
-              .resizeBilinear([640, 640])
-              .expandDims(0)
-              .toFloat()
-              .div(255.0)
-          )
-        );
-        const detections = await parseYoloOutputAll(predictions, 0.10);
+        const predictions = runInference(model, videoRef.current);
+        const detections = await parseYoloOutputAll(predictions, 0.08);
         if (Array.isArray(predictions)) predictions.forEach(t => t.dispose());
         else predictions.dispose();
         if (overlayRef.current) {
@@ -139,7 +145,8 @@ export default function VideoAnalysis({ model, onClose }) {
           drawDetections(octx, detections, overlayRef.current.width, overlayRef.current.height);
         }
         detections.forEach(d => {
-          countsByTypeRef.current[d.className] = (countsByTypeRef.current[d.className] || 0) + 1;
+          const key = d.displayLabel || d.className;
+          countsByTypeRef.current[key] = (countsByTypeRef.current[key] || 0) + 1;
         });
         fpsCounterRef.current.frames++;
         const now = performance.now();
@@ -183,7 +190,7 @@ export default function VideoAnalysis({ model, onClose }) {
     countsByTypeRef.current = {};
   };
 
-  const hazardEmoji = { crack: '⚡', pothole: '🕳️', waterlogging: '💧', debris: '🪨', unknown: '⚠️' };
+  const hazardEmoji = { ...LABEL_EMOJI };
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 'calc(var(--bottom-bar-height) + var(--safe-bottom, 0px))', background: '#000', zIndex: 3000, display: 'flex', flexDirection: 'column' }}>

@@ -1,17 +1,32 @@
 import * as tf from '@tensorflow/tfjs';
 
-const LABELS = ['D00 Crack', 'D10 Crack', 'D20 Crack', 'D40 Pothole', 'Repair'];
+const LABELS = [
+  'D00 (Longitudinal Crack)',
+  'D10 (Transverse Crack)',
+  'D20 (Alligator Crack)',
+  'D40 (Pothole)',
+];
 
 const RDD_TO_APP_TYPE = {
-  'D00 Crack': 'crack',
-  'D10 Crack': 'crack',
-  'D20 Crack': 'crack',
-  'D40 Pothole': 'pothole',
-  'Repair': 'crack',
+  'D00 (Longitudinal Crack)': 'crack',
+  'D10 (Transverse Crack)': 'crack',
+  'D20 (Alligator Crack)': 'crack',
+  'D40 (Pothole)': 'pothole',
+};
+
+const RDD_TO_DISPLAY = {
+  'D00 (Longitudinal Crack)': 'Longitudinal Crack',
+  'D10 (Transverse Crack)': 'Transverse Crack',
+  'D20 (Alligator Crack)': 'Alligator Crack',
+  'D40 (Pothole)': 'Pothole',
 };
 
 function mapToAppType(rawLabel) {
   return RDD_TO_APP_TYPE[rawLabel] || 'crack';
+}
+
+export function mapToDisplayLabel(rawLabel) {
+  return RDD_TO_DISPLAY[rawLabel] || rawLabel;
 }
 
 function extractTensor(output) {
@@ -46,10 +61,12 @@ export async function parseYoloOutputAll(output, threshold = 0.10) {
     const w = get(2);
     const h = get(3);
     if (w <= 0 || h <= 0) continue;
-    if (w < 5 || h < 5) continue;
+    if (w < 8 || h < 8) continue;
     rawDetections.push({
       classIndex: maxIdx,
+      rawLabel: LABELS[maxIdx],
       className: mapToAppType(LABELS[maxIdx]),
+      displayLabel: mapToDisplayLabel(LABELS[maxIdx]),
       confidence: maxProb,
       bbox: { cx, cy, w, h },
       nmsBox: [cy - h / 2, cx - w / 2, cy + h / 2, cx + w / 2],
@@ -58,7 +75,7 @@ export async function parseYoloOutputAll(output, threshold = 0.10) {
   if (rawDetections.length === 0) return [];
   const boxesTensor = tf.tensor2d(rawDetections.map(d => d.nmsBox), [rawDetections.length, 4]);
   const scoresTensor = tf.tensor1d(rawDetections.map(d => d.confidence));
-  const nmsIndices = await tf.image.nonMaxSuppressionAsync(boxesTensor, scoresTensor, 50, 0.5, threshold);
+  const nmsIndices = await tf.image.nonMaxSuppressionAsync(boxesTensor, scoresTensor, 50, 0.45, threshold);
   const selectedIndices = await nmsIndices.data();
   boxesTensor.dispose();
   scoresTensor.dispose();
@@ -70,7 +87,19 @@ export async function parseYoloOutputAll(output, threshold = 0.10) {
   return finalDetections;
 }
 
-export async function parseYoloOutput(output, threshold = 0.15) {
+export async function parseYoloOutput(output, threshold = 0.20) {
   const all = await parseYoloOutputAll(output, threshold);
   return all.length > 0 ? [all[0]] : [];
+}
+
+export function runInference(model, videoOrCanvas) {
+  return tf.tidy(() => {
+    const img = tf.browser.fromPixels(videoOrCanvas)
+      .resizeBilinear([640, 640])
+      .expandDims(0)
+      .toFloat()
+      .div(255.0);
+    const result = model.execute({ images: img });
+    return result;
+  });
 }
