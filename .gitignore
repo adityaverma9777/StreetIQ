@@ -27,3 +27,5 @@ Training material/
 demo_video_detections/
 run_frame_analysis.py
 skills-lock.json
+__pycache__/
+backend/weights/

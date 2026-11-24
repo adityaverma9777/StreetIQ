@@ -1,7 +1,8 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Camera, Play, Square, Film } from 'lucide-react';
+import { Camera, Play, Square, Film, Zap } from 'lucide-react';
 import * as tf from '@tensorflow/tfjs';
 import { parseYoloOutput, runInference } from './utils/tfjsParser';
+import { checkGpuServerHealth, predictFrameGpu } from './utils/gpuService';
 import { supabase } from './supabaseClient';
 import { useMotionGate } from './hooks/useMotionGate';
 import VideoAnalysis from './components/VideoAnalysis';
@@ -24,10 +25,18 @@ export default function RecordView({ onHazardDetected, isRecording, setIsRecordi
   const [fpsTarget, setFpsTarget] = useState(15);
   const [inferenceActive, setInferenceActive] = useState(false);
   const [useFixture, setUseFixture] = useState(false);
+  const [gpuOnline, setGpuOnline] = useState(false);
   const { handlePosition, cleanup } = useMotionGate(
     useCallback(() => setInferenceActive(true), []),
     useCallback(() => { setInferenceActive(false); setIsRecording(false); }, [setIsRecording])
   );
+  useEffect(() => {
+    let active = true;
+    checkGpuServerHealth().then(s => {
+      if (active) setGpuOnline(Boolean(s?.online));
+    });
+    return () => { active = false; };
+  }, []);
   useEffect(() => {
     if (speedKmh !== undefined) handlePosition({ coords: { speed: speedKmh / 3.6 } });
   }, [speedKmh, handlePosition]);
@@ -50,7 +59,7 @@ export default function RecordView({ onHazardDetected, isRecording, setIsRecordi
     }
   };
   useEffect(() => {
-    if (!isRecording || !inferenceActive || !model || !permissionGranted) return;
+    if (!isRecording || !inferenceActive || (!model && !gpuOnline) || !permissionGranted) return;
     let frameId;
     let lastTime = 0;
     const INTERVAL = 1000 / fpsTarget;
@@ -61,12 +70,34 @@ export default function RecordView({ onHazardDetected, isRecording, setIsRecordi
       if (!videoRef.current || videoRef.current.readyState !== 4) return;
       const inferenceStart = performance.now();
       try {
-        const predictions = runInference(model, videoRef.current);
-        const detections = await parseYoloOutput(predictions, 0.25);
-        if (Array.isArray(predictions)) predictions.forEach(t => t.dispose());
-        else predictions.dispose();
-        if (detections.length > 0 && userLocation) {
-          const best = detections[0];
+        let best = null;
+        if (gpuOnline) {
+          const res = await predictFrameGpu(videoRef.current, 0.20);
+          if (res?.detections && res.detections.length > 0) {
+            const top = res.detections[0];
+            best = {
+              className: top.app_type || 'pothole',
+              displayLabel: top.display_label,
+              confidence: top.confidence,
+              severity: top.severity || 4
+            };
+          }
+        } else if (model) {
+          const predictions = runInference(model, videoRef.current);
+          const detections = await parseYoloOutput(predictions, 0.25);
+          if (Array.isArray(predictions)) predictions.forEach(t => t.dispose());
+          else predictions.dispose();
+          if (detections.length > 0) {
+            const top = detections[0];
+            best = {
+              className: top.className,
+              displayLabel: top.displayLabel,
+              confidence: top.confidence,
+              severity: top.confidence > 0.8 ? 5 : 3
+            };
+          }
+        }
+        if (best && userLocation) {
           let imageBlob = null;
           if (canvasRef.current) {
             const vw = videoRef.current.videoWidth;
@@ -86,9 +117,9 @@ export default function RecordView({ onHazardDetected, isRecording, setIsRecordi
             p_detected_type: best.className,
             p_confidence: best.confidence,
             p_speed_kmh: speedKmh || 0,
-            p_source: 'ai_scan',
+            p_source: gpuOnline ? 'ai_scan_yolo11' : 'ai_scan',
           }).catch(() => {});
-          onHazardDetected({ type: best.className, severity: best.confidence > 0.8 ? 5 : 3, confidence: best.confidence }, imageBlob);
+          onHazardDetected({ type: best.className, severity: best.severity, confidence: best.confidence }, imageBlob);
         }
         const elapsed = performance.now() - inferenceStart;
         if (elapsed > 200 && fpsTarget > 2) setFpsTarget(2);
@@ -99,7 +130,7 @@ export default function RecordView({ onHazardDetected, isRecording, setIsRecordi
     };
     frameId = requestAnimationFrame(processFrame);
     return () => cancelAnimationFrame(frameId);
-  }, [isRecording, inferenceActive, fpsTarget, model, permissionGranted, userLocation, speedKmh, onHazardDetected]);
+  }, [isRecording, inferenceActive, fpsTarget, model, gpuOnline, permissionGranted, userLocation, speedKmh, onHazardDetected]);
   return (
     <div className="camera-overlay">
       {showVideoAnalysis && (
@@ -123,19 +154,24 @@ export default function RecordView({ onHazardDetected, isRecording, setIsRecordi
         )}
         {permissionGranted && (
           <div className="camera-status-bar">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(10px)', borderRadius: 20, padding: '5px 12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)', borderRadius: 20, padding: '5px 12px', border: '0.5px solid rgba(255,255,255,0.1)' }}>
               <div style={{ width: 7, height: 7, borderRadius: '50%', background: isRecording && inferenceActive ? 'var(--ios-red)' : 'rgba(235,235,245,0.3)', animation: isRecording && inferenceActive ? 'pulse 1.5s infinite' : 'none' }} />
-              <span style={{ fontSize: 12, color: 'rgba(235,235,245,0.8)', fontFamily: 'Inter, sans-serif' }}>
+              <span style={{ fontSize: 12, color: 'rgba(235,235,245,0.85)', fontFamily: 'Inter, sans-serif' }}>
                 {isRecording && inferenceActive ? `Scanning · ${fpsTarget} fps` : isRecording ? 'Paused — move to scan' : 'Ready'}
               </span>
+              {gpuOnline && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: 'rgba(48,209,88,0.2)', color: '#30D158', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 10 }}>
+                  <Zap size={9} /> RTX 3050 CUDA
+                </span>
+              )}
             </div>
-            <button onClick={toggleFixture} style={{ marginLeft: 'auto', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(10px)', border: 'none', borderRadius: 20, padding: '5px 12px', color: 'var(--ios-blue)', fontSize: 12, fontFamily: 'Inter, sans-serif', cursor: 'pointer' }}>
+            <button onClick={toggleFixture} style={{ marginLeft: 'auto', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)', border: '0.5px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: '5px 12px', color: 'var(--ios-blue)', fontSize: 12, fontFamily: 'Inter, sans-serif', cursor: 'pointer' }}>
               {useFixture ? 'Fixture' : 'Live'}
             </button>
           </div>
         )}
         {speedKmh !== undefined && permissionGranted && (
-          <div style={{ position: 'absolute', top: 16, right: 16, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(10px)', borderRadius: 12, padding: '6px 12px' }}>
+          <div style={{ position: 'absolute', top: 16, right: 16, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)', borderRadius: 12, padding: '6px 12px', border: '0.5px solid rgba(255,255,255,0.1)' }}>
             <span style={{ fontSize: 13, color: 'white', fontFamily: 'Inter, sans-serif', fontWeight: 600 }}>{Math.round(speedKmh)} <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.7 }}>km/h</span></span>
           </div>
         )}
@@ -144,7 +180,7 @@ export default function RecordView({ onHazardDetected, isRecording, setIsRecordi
         <div className="camera-controls">
           <button
             onClick={() => setShowVideoAnalysis(true)}
-            style={{ background: 'rgba(0,0,0,0.5)', border: '0.5px solid rgba(84,84,88,0.5)', color: 'rgba(235,235,245,0.7)', fontSize: 13, fontFamily: 'Inter, sans-serif', cursor: 'pointer', padding: '10px 14px', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 6 }}
+            style={{ background: 'rgba(0,0,0,0.6)', border: '0.5px solid rgba(84,84,88,0.5)', color: 'rgba(235,235,245,0.8)', fontSize: 13, fontFamily: 'Inter, sans-serif', cursor: 'pointer', padding: '10px 14px', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 6 }}
           >
             <Film size={14} /> How We Work
           </button>
